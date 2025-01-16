@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: frontend
+          image: sofianeazirar/react-frontend-v2:latest
+          env:
+            - name: REACT_APP_API_URL
+              value: http://backend-service:8080/api
+            - name: VITE_ENVIRONMENT
+              value: "production"
+            - name: VITE_BACKEND_URL
+              value: "https://team10.launchingkube.com"
+            - name: VITE_KC_URL
+              value: "https://team10.launchingkube.com/auth"
+            - name: VITE_KC_REALM
+              value: "Monopoly"
+            - name: VITE_KC_CLIENT_ID
+              value: "monopoly"
+          ports:
+            - containerPort: 3000
+      imagePullSecrets:
+      - name: gitlab-registry-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: react-frontend-service
+spec:
+  selector:
+    app: frontend
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+  type: LoadBalancer

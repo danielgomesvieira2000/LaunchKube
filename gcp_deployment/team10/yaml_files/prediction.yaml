@@ -1,0 +1,48 @@
+# prediction.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prediction
+  labels:
+    app: prediction
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prediction
+  template:
+    metadata:
+      labels:
+        app: prediction
+    spec:
+      containers:
+        - name: prediction
+          image: thomasdwl/integratieproject:latest
+          ports:
+            - containerPort: 5000
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://localhost:5432/monopoly_db"
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prediction-service
+spec:
+  selector:
+    app: prediction
+  ports:
+    - protocol: TCP
+      port: 5000
+      targetPort: 5000
+  type: LoadBalancer

@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app: backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: backend
+          image: sofianeazirar/infrastructure-backend:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://localhost:5432/monopoly_db"
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: password
+            - name: CORS_PORT
+              value: "http://react-frontend-service:3000"
+            - name: "CHATBOT_URL"
+              value: "http://chatbot-service:5000"
+            - name: "PREDICTION_URL"
+              value: "http://prediction-service:5000"
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              value: "http://keycloak-service:8180/realms/Monopoly"
+            - name: JWT_JWK_SET_URI
+              value: "http://keycloak-service:8180/realms/Monopoly/protocol/openid-connect/certs"
+          volumeMounts:
+            - name: cloudsql
+              mountPath: /cloudsql
+
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.11.4
+          args:
+            - "--structured-logs"
+            - "--port=5432"
+            - "deploy-team-10:europe-central2:deploy-team-10-pg-instance"
+          securityContext:
+            runAsNonRoot: true
+          volumeMounts:
+            - name: secret-volume
+              mountPath: /secrets
+              readOnly: true
+
+      imagePullSecrets:
+        - name: gitlab-registry-secret
+      volumes:
+        - name: cloudsql
+          emptyDir: {}
+        - name: secret-volume
+          secret:
+            secretName: db-credentials
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+spec:
+  selector:
+    app: backend
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: LoadBalancer

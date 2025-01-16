@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      priorityClassName: high-priority
+      containers:
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.11.4
+          args:
+          - "--structured-logs"
+          - "--port=5432"
+          - "test-team10-444609:europe-central2:test-team10-444609-pg-instance"
+          securityContext:
+            runAsNonRoot: true
+          volumeMounts:
+            - name: secret-volume-keycloak
+              mountPath: /secrets
+              readOnly: true
+        - image: quay.io/keycloak/keycloak:25.0.5
+          name: keycloak
+          ports:
+            - containerPort: 8180
+            - containerPort: 9000
+          args:
+            - "start"
+            - "--http-port=8180"
+            - "--import-realm"
+            - "--verbose"
+          env:
+            - name: KC_PROXY_HEADERS
+              value: "xforwarded"
+            - name: KC_HOSTNAME
+              value: "team15.launchingkube.com"
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_PROXY
+              value: "edge"
+            - name: KEYCLOAK_ADMIN
+              value: "user"
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              value: "password"
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: KC_HOSTNAME_STRICT_HTTPS
+              value: "false"
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
+            - name: KC_DB
+              value: "postgres"
+            - name: KC_DB_URL_HOST
+              value: "localhost"
+            - name: KC_DB_URL_PORT
+              value: "5432"
+            - name: KC_DB_URL_DATABASE
+              value: "keycloak"
+            - name: KC_DB_USERNAME
+              value: "user"
+            - name: KC_DB_PASSWORD
+              value: "password"
+          volumeMounts:
+            - name: realm-export
+              mountPath: /opt/keycloak/data/import/realm-export.json
+              subPath: realm-export.json
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+      volumes:
+        - name: realm-export
+          configMap:
+            name: keycloak-realm
+        - name: secret-volume-keycloak
+          secret:
+              secretName: db-credentials-keycloak
+        - name: postgres-idp-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+spec:
+  selector:
+    app: keycloak
+  ports:
+    - protocol: TCP
+      name: port1
+      port: 8180
+      targetPort: 8180
+    - protocol: TCP
+      name: port2
+      port: 9000
+      targetPort: 9000

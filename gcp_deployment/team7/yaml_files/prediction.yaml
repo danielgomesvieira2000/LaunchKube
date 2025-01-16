@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prediction-deployment
+  labels:
+    app: prediction
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prediction
+  template:
+    metadata:
+      labels:
+        app: prediction
+    spec:
+      containers:
+      - name: prediction
+        image: registry.gitlab.com/kdg-ti/integratieproject-2/2024-2025/team7/backend-ai-service/prediction
+        ports:
+        - containerPort: 8080
+      imagePullSecrets:
+        - name: gitlab-registry-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prediction-service
+spec:
+  selector:
+    app: prediction
+  ports:
+  - protocol: TCP
+    port: 5000
+    targetPort: 8080
+  type: ClusterIP

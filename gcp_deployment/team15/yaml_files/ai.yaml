@@ -1,0 +1,158 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai
+  labels:
+    app: ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai
+  template:
+    metadata:
+      labels:
+        app: ai
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: web
+          image: registry.gitlab.com/kdg-ti/integratieproject-2/2024-2025/team15/backend-ai-service:main
+          imagePullPolicy: Always
+          ports:
+              - containerPort: 8001
+          env:
+            - name: WAIT_FOR_HOSTS
+              value: "chroma:8000"
+            - name: CHROMA_PORT
+              value: "8000"
+            - name: CHROMA_HOST
+              value: "chroma"
+            - name: OLLAMA_URI
+              value: "http://ollama:11434/api/generate"
+            - name: GEMINI_KEY
+              value: "AIzaSyAP7jWU-Vam0So9vl5AUzhFLzv0ntSFtRE"
+      imagePullSecrets:
+        - name: gitlab-registry-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai
+  labels:
+    app: ai
+spec:
+  selector:
+    app: ai
+  ports:
+    - protocol: TCP
+      port: 8001 # Internal port used by the web container
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chroma
+  labels:
+    app: chroma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chroma
+  template:
+    metadata:
+      labels:
+        app: chroma
+    spec:
+      containers:
+        - name: chroma
+          image: ghcr.io/chroma-core/chroma:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: CHROMA_SERVER_NOFILE
+              value: "1048576"
+            - name: IS_PERSISTENT
+              value: "1"
+          livenessProbe:
+            httpGet:
+              path: /docs
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 60
+          volumeMounts:
+            - name: index-data
+              mountPath: /chroma/.chroma/index
+      volumes:
+        - name: index-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chroma
+  labels:
+    app: chroma
+spec:
+  selector:
+    app: chroma
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  labels:
+    app: ollama
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+        - name: ollama
+          image: registry.gitlab.com/kdg-ti/integratieproject-2/2024-2025/team15/backend-ai-service/ollama-custom:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 11434
+          volumeMounts:
+            - name: ollama-volume
+              mountPath: /ollama
+          command: [ "/bin/bash", "/pull-llama.sh" ]
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 11434
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      imagePullSecrets:
+        - name: gitlab-registry-secret
+      volumes:
+        - name: ollama-volume
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  labels:
+    app: ollama
+spec:
+  selector:
+    app: ollama
+  ports:
+    - protocol: TCP
+      port: 11434
+      targetPort: 11434
+  type: ClusterIP

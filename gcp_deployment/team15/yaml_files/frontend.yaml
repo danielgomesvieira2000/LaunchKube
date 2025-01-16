@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      serviceAccountName: default
+      containers:
+        # React frontend container
+        - name: react-frontend
+          image: registry.gitlab.com/kdg-ti/integratieproject-2/2024-2025/team15/frontend:main
+          imagePullPolicy: Always
+          env:
+            - name: BACKEND_URL
+              value: "http://backend:8080"
+            - name: KEYCLOAK_URL
+              value: "http://keycloak:8180"
+          ports:
+            - containerPort: 80
+      imagePullSecrets:
+      - name: gitlab-registry-secret 
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      name: http
+  type: LoadBalancer

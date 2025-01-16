@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app: backend
+  annotations:
+    cloud.google.com/backend-config: '{"default": "backend-config"}'
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      initContainers:
+      - name: wait-for-service
+        image: alpine
+        command: ["sh", "-c", "until nc -z -v -w30 rabbitmq-stomp.default.svc.cluster.local 61613; do sleep 1; done"]
+      serviceAccountName: default
+      containers:
+        - name: backend
+          image: registry.gitlab.com/kdg-ti/integratieproject-2/2024-2025/team15/backend-game-service:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: FRONTEND_URL
+              value: "http://team15.launchingkube.com"
+            - name: SPRING_PROFILES_ACTIVE
+              value: "prod"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://localhost:5432/machikoro"
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: password
+            - name: AI_SERVICE_URL
+              value: "http://ai:8001"
+            - name: AI_PREDICTION_URL
+              value: "http://prediction-model-api-service:8002"
+            - name: SPRING_RABBITMQ_HOST
+              value: "rabbitmq-stomp"
+            - name: SPRING_RABBITMQ_PORT
+              value: "61613"
+            - name: SPRING_RABBITMQ_USERNAME
+              value: "user"
+            - name: SPRING_RABBITMQ_PASSWORD
+              value: "password"
+            - name: "MAIL_SMTP_HOST"
+              value: mail.smtp2go.com
+            - name: "MAIL_SMTP_PORT"
+              value: "2525"
+            - name: "MAIL_SMTP_USERNAME"
+              valueFrom:
+                secretKeyRef:
+                  name: mail-credentials
+                  key: username
+            - name: "MAIL_SMTP_PASSWORD"
+              valueFrom:
+                secretKeyRef:
+                  name: mail-credentials
+                  key: password
+            - name: "MAIL_SMTP_EMAIL"
+              valueFrom:
+                secretKeyRef:
+                  name: mail-credentials
+                  key: email
+
+          volumeMounts:
+            - name: cloudsql
+              mountPath: /cloudsql
+            - name: secret-volume
+              mountPath: /secrets
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.11.4
+          args:
+          - "--structured-logs"
+          - "--port=5432"
+          - "ip2-deployment-testing-16:europe-central2:ip2-deployment-testing-16-pg-instance"
+          securityContext:
+            runAsNonRoot: true
+          volumeMounts:
+            - name: secret-volume
+              mountPath: /secrets
+              readOnly: true
+      imagePullSecrets:
+        - name: gitlab-registry-secret 
+      volumes:
+          - name: cloudsql
+            emptyDir: {}
+          - name: secret-volume
+            secret:
+              secretName: db-credentials
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels:
+    app: backend
+  annotations:
+    cloud.google.com/load-balancer-type: "Internal"
+spec:
+  selector:
+    app: backend
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: LoadBalancer

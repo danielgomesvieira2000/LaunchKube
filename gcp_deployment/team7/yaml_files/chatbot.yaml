@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatbot-deployment
+  labels:
+    app: chatbot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chatbot
+  template:
+    metadata:
+      labels:
+        app: chatbot
+    spec:
+      containers:
+      - name: chatbot
+        image: registry.gitlab.com/kdg-ti/integratieproject-2/2024-2025/team7/backend-ai-service/chatbot
+        ports:
+        - containerPort: 8081
+        env:
+        - name: FLASK_APP
+          value: "chatbot.py"
+        - name: FLASK_RUN_PORT
+          value: "8081"
+      imagePullSecrets:
+        - name: gitlab-registry-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chatbot-service
+spec:
+  selector:
+    app: chatbot
+  ports:
+  - protocol: TCP
+    port: 8081
+    targetPort: 8081
+  type: ClusterIP

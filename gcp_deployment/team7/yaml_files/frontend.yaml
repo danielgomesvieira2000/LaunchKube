@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: react-frontend
+  labels:
+    app: react-frontend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: react-frontend
+  template:
+    metadata:
+      labels:
+        app: react-frontend
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: react-frontend
+          image: registry.gitlab.com/kdg-ti/integratieproject-2/2024-2025/team7/frontend:latest
+          env:
+            - name: VITE_BACKEND_URL
+              value: "http://backend-service:8080/api"
+            - name: VITE_KC_URL
+              value: "http://keycloak-service:8180"
+          ports:
+            - containerPort: 80
+      imagePullSecrets:
+        - name: gitlab-registry-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: react-frontend-service
+spec:
+  selector:
+    app: react-frontend
+  ports:
+    - name: frontend
+      protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP

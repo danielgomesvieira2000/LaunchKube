@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: machikoro-ingress
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: ip2-global
+    networking.gke.io/managed-certificates: "team15-cert"
+spec:
+  rules:
+    - host: team15.launchingkube.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: react-frontend-service
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - team15.launchingkube.com

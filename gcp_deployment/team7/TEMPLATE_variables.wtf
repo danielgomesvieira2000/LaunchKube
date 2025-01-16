@@ -1,0 +1,117 @@
+variable "project_id" {
+    type = string
+    default = "{PROJECT_ID}"
+}
+
+variable "project_services" {
+  type = list
+  description = "The GCP APIs that should be enabled in this project."
+  default = [
+    "cloudresourcemanager.googleapis.com",
+    "servicenetworking.googleapis.com",
+    "container.googleapis.com",
+    "compute.googleapis.com",
+    "iam.googleapis.com",
+    "logging.googleapis.com",
+    "monitoring.googleapis.com",
+    "sqladmin.googleapis.com",
+    "securetoken.googleapis.com",
+    "generativelanguage.googleapis.com"
+  ]
+}
+
+variable "terraform_sa" {
+    description = "terraform service account"
+    type = string
+    default = "terraform@{PROJECT_ID}.iam.gserviceaccount.com"
+
+}
+
+variable "service_account_iam_roles" {
+  type = list
+  description = "List of the default IAM roles to attach to the service account on the GKE Nodes."
+  default = [
+    "roles/logging.logWriter",
+    "roles/monitoring.metricWriter",
+    "roles/monitoring.viewer",
+    "roles/iam.workloadIdentityUser",
+    "roles/cloudsql.client",
+    "roles/cloudsql.instanceUser",
+  ]
+}
+
+variable "k8s_namespace" {
+  type        = string
+  description = "The namespace to use for the deployment and workload identity binding"
+  default     = "default"
+}
+
+variable "k8s_sa_name" {
+  type        = string
+  description = "The k8s service account name to use for the deployment and workload identity binding"
+  default     = "postgres-ksa"
+}
+
+variable "region" {
+    type = string
+    default = "europe-central2"
+}
+
+variable "zone" {
+    type = string
+    default = "europe-central2-a"
+}
+
+variable "os_image" {
+    type = string
+    default = "debian-12-bookworm-v20241112"
+}
+
+variable "machine_type" {
+    type = string
+    default = "e2-medium"
+}
+
+variable "gke_num_nodes" {
+    description = "number of gke nodes"
+    default = 1
+}
+
+variable "registry_server" {
+  description = "Docker registry"
+  type        = string
+  default     = "registry.gitlab.com"
+}
+
+variable "docker_registry_username" {
+  description = "Docker registry username"
+  type        = string
+  sensitive   = true
+}
+
+variable "docker_registry_password" {
+  description = "Docker registry password"
+  type        = string
+  sensitive   = true
+}
+
+variable "db_user" {
+    description = "database user"
+    default = "monopolysuper"
+}
+
+variable "db_password" {
+    description = "database password"
+    default = "234hheaaefzEzqz#"
+}
+
+variable "db_instance" {
+    description = "db instance"
+    default = "postgres-dev-db"
+}
+
+variable "db_name" {
+    description = "database description"
+    type = string
+    default = "monopolydb"
+}

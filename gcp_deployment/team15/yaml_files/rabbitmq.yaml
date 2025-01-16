@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq-stomp
+  labels:
+    app: rabbitmq-stomp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq-stomp
+  serviceName: rabbitmq-stomp
+  template:
+    metadata:
+      labels:
+        app: rabbitmq-stomp
+    spec:
+      containers:
+        - name: rabbitmq-stomp
+          image: rabbitmq:4.0.2-management-alpine
+          ports:
+            - containerPort: 5672 # AMQP
+            - containerPort: 15672 # Management
+            - containerPort: 61613 # STOMP
+          command: ["sh", "-c"]
+          args: 
+          - >
+            rabbitmq-plugins enable rabbitmq_stomp &&
+            rabbitmq-plugins enable rabbitmq_management &&
+            rabbitmq-server;
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              value: "user"
+            - name: RABBITMQ_DEFAULT_PASS
+              value: "password"
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
+          readinessProbe:
+            tcpSocket:
+              port: 61613
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 5672
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          startupProbe:
+            tcpSocket:
+              port: 61613
+            initialDelaySeconds: 15
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: rabbitmq-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-stomp
+  labels:
+    app: rabbitmq-stomp
+spec:
+  selector:
+    app: rabbitmq-stomp
+  ports:
+    - name: amqp
+      protocol: TCP
+      port: 5672
+      targetPort: 5672
+    - name: management
+      protocol: TCP
+      port: 15672
+      targetPort: 15672
+    - name: stomp
+      protocol: TCP
+      port: 61613
+      targetPort: 61613
+  type: ClusterIP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 36000
