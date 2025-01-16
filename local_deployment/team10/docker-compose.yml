@@ -1,0 +1,113 @@
+name: team10
+services:
+  postgres_monopoly_db:
+    image: postgres
+    environment:
+      POSTGRES_DB: 'monopoly_db'
+      POSTGRES_USER: 'user'
+      POSTGRES_PASSWORD: 'password'
+    ports:
+      - '5347:5432'
+    container_name: postgresql_container2
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user -d monopoly_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - app_network
+
+  backend:
+    image: sofianeazirar/infrastructure-backend:latest
+    container_name: testapp_container2
+    ports:
+      - '8080:8080'
+    environment:
+        SPRING_DATASOURCE_URL: jdbc:postgresql://postgres_monopoly_db:5432/monopoly_db?currentSchema=monopoly
+        SPRING_DATASOURCE_USERNAME: user
+        SPRING_DATASOURCE_PASSWORD: password
+        SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://monopoly_keycloak:8080/realms/Monopoly
+        JWT_JWK_SET_URI: http://monopoly_keycloak:8080/realms/Monopoly/protocol/openid-connect/certs
+    depends_on:
+      postgres_monopoly_db:
+        condition: service_healthy
+      monopoly_keycloak:
+        condition: service_started
+    restart: always
+    networks:
+      - app_network
+
+
+  frontend:
+    image: sofianeazirar/react-frontend-v2:latest
+    container_name: testapp_container_frontend
+    ports:
+      - '3000:3000'
+    environment:
+      VITE_BACKEND_URL: http://backend:8080/api
+      VITE_KC_URL: http://monopoly_keycloak:8080/auth
+      VITE_KC_REALM: Monopoly
+      VITE_KC_CLIENT_ID: monopoly
+      VITE_ENVIRONMENT: development
+    depends_on:
+      - backend
+    networks:
+      - app_network
+
+  monopoly_idp_postgres:
+    image: postgres:15.8-alpine
+    volumes:
+      - idp_db:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready", "-U", "keycloak", "-d", "keycloak"]
+      interval: 30s
+      timeout: 60s
+      retries: 5
+      start_period: 80s
+    networks:
+      - app_network
+
+
+  monopoly_keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    environment:
+      KEYCLOAK_ADMIN: user
+      KEYCLOAK_ADMIN_PASSWORD: password
+      KC_DB: postgres
+      KC_DB_URL_HOST: monopoly_idp_postgres
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: password
+    ports:
+      - "8180:8080"
+    depends_on:
+      - monopoly_idp_postgres
+    networks:
+      - app_network
+    volumes:
+      - ./monopoly_realm.json:/opt/keycloak/data/import/monopoly_realm.json
+    command: ["start-dev", "--import-realm", "--verbose"]
+
+
+  python_backend:
+    image: thomasdwl/integratieproject:latest
+    container_name: python_backend
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres_monopoly_db:
+        condition: service_healthy
+    restart: always
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  idp_db:
+    driver: local

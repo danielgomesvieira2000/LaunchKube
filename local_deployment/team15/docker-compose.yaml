@@ -1,0 +1,200 @@
+services:
+  react:
+    image: registry.gitlab.com/kdg-ti/integratieproject-2/2024-2025/team15/frontend:main
+    ports:
+      - "80:80"
+    container_name: react-container
+    environment:
+      BACKEND_URL: "http://spring-app:8080"
+      KEYCLOAK_URL: "http://keycloak:8180"
+    restart: always
+    networks:
+      - spring-postgres-network
+      - keycloak-network
+    depends_on:
+      spring-app:
+        condition: service_started
+  spring-app:
+    image: registry.gitlab.com/kdg-ti/integratieproject-2/2024-2025/team15/backend-game-service:main
+    container_name: spring-app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/machikoro
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: password
+      MAIL_SMTP_HOST: mail.smtp2go.com
+      MAIL_SMTP_PORT: 2525
+      MAIL_SMTP_USERNAME: "Machikoro Game"
+      MAIL_SMTP_EMAIL: machikoro@yopmail.com
+      MAIL_SMTP_PASSWORD: CMm1CKdPRLria2h7
+      AI_PREDICTION_URL: "http://prediction-model-api:8002"
+      AI_SERVICE_URL: "http://chatbot:8001"
+      FRONTEND_URL: http://localhost # this sets the cross-origin policy and the jwt issuer URI
+      SPRING_RABBITMQ_USERNAME: user
+      SPRING_RABBITMQ_PASSWORD: password
+      SPRING_RABBITMQ_HOST: rabbitmq-stomp
+      SPRING_RABBITMQ_PORT: 61613
+
+    networks:
+      - spring-postgres-network
+      - keycloak-network
+      - rabbitmq-stomp
+    depends_on:
+      postgres-db:
+        condition: service_started
+      rabbitmq-stomp:
+        condition: service_started
+      keycloak:
+        condition: service_healthy
+  rabbitmq-stomp:
+    image: rabbitmq:4.0.2-management-alpine
+    container_name: rabbitmq-stomp
+    environment:
+      - RABBITMQ_DEFAULT_USER=user
+      - RABBITMQ_DEFAULT_PASS=password
+    ports:
+      - "5672:5672" #AMQP
+      - "15672:15672" #MGMT
+      - "61613:61613"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq-stomp/data
+    networks:
+      - rabbitmq-stomp
+    command: >
+      sh -c "rabbitmq-plugins enable rabbitmq_stomp &&
+             rabbitmq-plugins enable rabbitmq_management &&
+             rabbitmq-server"
+
+  postgres-db:
+    image: postgres:latest # Pulls the latest PostgreSQL image
+    container_name: postgres-db
+    ports:
+      - "5432:5432" # Map container's port 5432 to localhost
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: machikoro
+    networks:
+      - spring-postgres-network
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    
+  
+  prediction-model-api:
+    image: registry.gitlab.com/kdg-ti/integratieproject-2/2024-2025/team15/ai-model:main
+    ports:
+      - 8002:8002
+    networks:
+      - spring-postgres-network
+
+
+  chatbot:
+    image: registry.gitlab.com/kdg-ti/integratieproject-2/2024-2025/team15/backend-ai-service:main
+    ports:
+      - 8001:8001
+    networks:
+      - spring-postgres-network
+    depends_on:
+      chroma:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    environment:
+      - WAIT_FOR_HOSTS=chroma:8000
+      - CHROMA_PORT=8000
+      - CHROMA_HOST=chroma
+      - OLLAMA_URI=http://ollama:11434/api/generate
+      - GEMINI_KEY=AIzaSyAP7jWU-Vam0So9vl5AUzhFLzv0ntSFtRE
+
+  ollama:
+    image: registry.gitlab.com/kdg-ti/integratieproject-2/2024-2025/team15/backend-ai-service/ollama-custom:main
+    ports:
+      - 11434:11434
+    volumes:
+      - ollama-data:/ollama
+    networks:
+      - spring-postgres-network
+    entrypoint: [ "/bin/bash", "/pull-llama.sh" ]
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:11434" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  chroma:
+    image: ghcr.io/chroma-core/chroma:latest
+    volumes:
+      - index_data:/chroma/.chroma/index
+    ports:
+      - 8000:8000
+    networks:
+      - spring-postgres-network
+    environment:
+      - CHROMA_SERVER_NOFILE=1048576
+      - IS_PERSISTENT=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 60s
+      timeout: 5s
+      retries: 5
+
+  postgres-db-idp:
+    image: postgres:15.8-alpine
+    volumes:
+      - postgres-idp-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: password
+    networks:
+      - keycloak-network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0.5
+    environment:
+      KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME_STRICT: false
+      KC_HTTP_ENABLED: true
+      KC_PROXY: edge
+      KEYCLOAK_ADMIN: user
+      KEYCLOAK_ADMIN_PASSWORD: password
+      KC_HEALTH_ENABLED: true
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgres-db-idp
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: password
+    command: start-dev --import-realm --http-port=8180
+    ports:
+      - "8180:8180"
+      - "9000:9000"
+    depends_on:
+      - postgres-db-idp
+    networks:
+      - keycloak-network
+    volumes:
+      - ./realm-export.json:/opt/keycloak/data/import/realm-export.json
+
+    # src: https://www.reddit.com/r/KeyCloak/comments/14a5a1y/comment/lr200q4
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000;echo -e \"GET /health/ready HTTP/1.1\r\nhost: http://localhost\r\nConnection: close\r\n\r\n\" >&3;grep \"HTTP/1.1 200 OK\" <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+networks:
+  spring-postgres-network:
+    driver: bridge
+  keycloak-network:
+    driver: bridge
+  rabbitmq-stomp:
+    driver: bridge
+
+
+volumes:
+  postgres-data:
+  postgres-idp-data:
+  index_data:
+  ollama-data:
+  rabbitmq-data:
